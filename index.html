@@ -1,48 +1,160 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <title>Dashboard Tesouraria – PIB CDB</title>
+  <meta charset="utf-8" />
+  <title>Dashboard Tesouraria – PIB CDB (Avançado)</title>
+
+  <!-- CSS básico + tema -->
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 20px;
-      background: #f7f7f7;
+    :root{
+      --bg:#f5f7fb;--card:#fff;--muted:#666;--accent:#1f7aec;
+      --success:#0b9b3a;--danger:#d23b3b;
     }
-    h1 {
-      text-align: center;
-      margin-bottom: 30px;
+    [data-theme="dark"]{
+      --bg:#0b1220;--card:#0f1724;--muted:#96a0b5;--accent:#58a6ff;
+      color:#e6eef8;
     }
-    h2 {
-      margin-top: 40px;
-      color: #333;
-    }
-    .card {
-      background: white;
-      padding: 15px;
-      margin-bottom: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-    .saldo-positivo {
-      color: green;
-      font-weight: bold;
-    }
-    .saldo-negativo {
-      color: red;
-      font-weight: bold;
-    }
-    table {
-      border-collapse: collapse;
-      width: 100%;
-      margin-top: 10px;
-      background: white;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: left;
-    }
-    th {
-      background: #eee;
-      pos
+    *{box-sizing:border-box}
+    body{font-family:Inter,Arial,Helvetica,sans-serif;margin:0;background:var(--bg);color:inherit}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:18px 20px}
+    .brand{display:flex;gap:12px;align-items:center}
+    .brand h1{font-size:18px;margin:0}
+    .controls{display:flex;gap:8px;align-items:center}
+    .card{background:var(--card);padding:14px;border-radius:10px;box-shadow:0 6px 18px rgba(2,6,23,0.06)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:16px 20px}
+    .row{margin:16px 20px}
+    .small{font-size:13px;color:var(--muted)}
+    .summary{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .summary .stat{min-width:180px;padding:12px;border-radius:8px}
+    .green{color:var(--success);font-weight:700}
+    .red{color:var(--danger);font-weight:700}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:8px;border-bottom:1px solid rgba(0,0,0,0.06);text-align:left;font-size:13px}
+    th{background:linear-gradient(180deg,rgba(0,0,0,0.02),transparent);position:sticky;top:0}
+    .toolbar{display:flex;gap:8px;align-items:center}
+    select,input{padding:8px;border-radius:8px;border:1px solid #dfe7f1;background:transparent}
+    button{padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:white;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid rgba(0,0,0,0.08);color:inherit}
+    .charts{display:grid;grid-template-columns:1fr 420px;gap:16px}
+    canvas{background:transparent;border-radius:8px;padding:12px}
+    .dizimistas-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:12px}
+    .dcard{padding:12px;border-radius:8px}
+    .export{display:flex;gap:8px;align-items:center}
+    footer{margin:30px 20px;color:var(--muted);font-size:13px}
+    @media(max-width:900px){.charts{grid-template-columns:1fr}}
+  </style>
+
+  <!-- Bibliotecas via CDN: PapaParse, Chart.js, SheetJS, html2pdf -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.9.3/dist/html2pdf.bundle.min.js"></script>
+</head>
+<body data-theme="light">
+  <header>
+    <div class="brand">
+      <img src="https://raw.githubusercontent.com/github/explore/main/topics/church/church.png" width="38" alt="" />
+      <div>
+        <h1>Dashboard Tesouraria – PIB CDB</h1>
+        <div class="small">Dados atualizados automaticamente do Google Sheets</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="toolbar card" style="display:flex;gap:8px;align-items:center;">
+        <label class="small">Ano</label>
+        <select id="filterYear"></select>
+
+        <label class="small">Mês</label>
+        <select id="filterMonth">
+          <option value="">Todos</option>
+          <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option>
+          <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+          <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+          <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+        </select>
+
+        <input id="globalSearch" placeholder="Buscar (nome, descrição...)" />
+        <button id="applyFilters" class="ghost">Aplicar</button>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button id="toggleTheme" title="Alternar tema">Tema</button>
+        <div class="export card" style="padding:8px">
+          <button id="btnPdf">Exportar PDF</button>
+          <button id="btnExcel">Baixar Excel</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="row">
+      <div class="card summary">
+        <div class="stat card" style="flex:1">
+          <div class="small">Total Entradas</div>
+          <div id="totalEntradas" style="font-size:20px">—</div>
+        </div>
+        <div class="stat card" style="flex:1">
+          <div class="small">Total Saídas</div>
+          <div id="totalSaidas" style="font-size:20px">—</div>
+        </div>
+        <div class="stat card" style="flex:1">
+          <div class="small">Saldo</div>
+          <div id="saldoFinal" style="font-size:20px">—</div>
+        </div>
+        <div class="stat card" style="flex:0 0 220px">
+          <div class="small">Última atualização</div>
+          <div id="lastUpdate">—</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>Gráficos</h2>
+        <div class="charts" style="margin-top:12px">
+          <div class="card" style="padding:12px">
+            <canvas id="chartEntradasSaidas" height="260"></canvas>
+          </div>
+          <div class="card">
+            <h4 class="small">Distribuição por Tipo (Entradas)</h4>
+            <canvas id="chartPie" height="200"></canvas>
+            <div class="small" style="margin-top:8px">Fonte: planilha</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Totais por Mês</h2>
+        <div id="monthlyTable" style="overflow:auto;margin-top:12px"></div>
+      </div>
+
+      <div class="card" style="grid-column:1/-1">
+        <h2>Entradas</h2>
+        <div id="tableEntradas"></div>
+      </div>
+
+      <div class="card" style="grid-column:1/-1">
+        <h2>Saídas</h2>
+        <div id="tableSaidas"></div>
+      </div>
+
+      <div class="card" style="grid-column:1/-1">
+        <h2>Dizimistas</h2>
+        <div id="dizimistasOverview" class="dizimistas-cards"></div>
+        <div id="tableDizimistas" style="margin-top:12px"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Criado automaticamente · Atualiza com as mudanças na planilha · Se quiser personalizar colunas, me diga.
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
+   
