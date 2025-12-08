@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <title>Dashboard Tesouraria</title>
+  <title>Dashboard Tesouraria – PIB CDB</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -11,10 +11,26 @@
     }
     h1 {
       text-align: center;
+      margin-bottom: 30px;
     }
     h2 {
       margin-top: 40px;
       color: #333;
+    }
+    .card {
+      background: white;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .saldo-positivo {
+      color: green;
+      font-weight: bold;
+    }
+    .saldo-negativo {
+      color: red;
+      font-weight: bold;
     }
     table {
       border-collapse: collapse;
@@ -29,16 +45,4 @@
     }
     th {
       background: #eee;
-    }
-  </style>
-</head>
-<body>
-  <h1>Dashboard Tesouraria – PIB CDB</h1>
-
-  <div id="entradas"></div>
-  <div id="saidas"></div>
-  <div id="dizimistas"></div>
-
-  <script src="script.js"></script>
-</body>
-</html>
+      pos
