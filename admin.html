@@ -1,45 +1,216 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel Administrativo</title>
-    <script src="auth.js"></script>
+  <meta charset="utf-8" />
+  <title>Painel Administrativo · Tesouraria PIB CDB</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-    <style>
-        body {
-            font-family: Arial;
-            background: #eef1f7;
-            padding: 20px;
-        }
-        .box {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        .logout-btn {
-            background: red;
-            color: white;
-            padding: 10px;
-            float: right;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-    </style>
+  <!-- estilos simples -->
+  <style>
+    :root{--bg:#f5f7fb;--card:#fff;--accent:#1366d6;--muted:#6b7280}
+    body{margin:0;font-family:Segoe UI,Inter,Arial;background:var(--bg);color:#0f172a}
+    header{display:flex;justify-content:space-between;align-items:center;padding:18px 20px}
+    .brand h1{margin:0;font-size:18px}
+    .wrap{display:grid;grid-template-columns:250px 1fr;gap:18px;padding:0 20px 40px}
+    nav{padding-top:8px}
+    .menu{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 6px 18px rgba(2,6,23,0.06)}
+    .menu button{display:block;width:100%;text-align:left;padding:10px;border:0;background:transparent;border-radius:6px;cursor:pointer}
+    .menu button.active{background:linear-gradient(90deg,rgba(19,102,214,0.12),transparent)}
+    main .card{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 6px 18px rgba(2,6,23,0.03);margin-bottom:12px}
+    .controls{display:flex;gap:8px;align-items:center}
+    input,select{padding:8px;border-radius:6px;border:1px solid #e6eef8}
+    .topbar{display:flex;justify-content:space-between;gap:12px;align-items:center}
+    table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+    th,td{padding:8px;border-bottom:1px solid #eef2f7;text-align:left}
+    th{background:#fbfdff}
+    .small{font-size:12px;color:var(--muted)}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:white;cursor:pointer}
+    .danger{background:#d23b3b}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .dcard{padding:10px;border-radius:8px;background:#fff}
+    footer{padding:12px;text-align:center;color:var(--muted);font-size:13px}
+  </style>
 
+  <!-- libs -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- proteção: redireciona se não autenticado -->
+  <script src="auth.js"></script>
 </head>
 <body>
+  <header>
+    <div class="brand">
+      <h1>Painel da Tesouraria · PIB CDB</h1>
+      <div class="small">Acesso privilegiado</div>
+    </div>
+    <div class="controls">
+      <button class="btn" id="openPublic">Abrir dashboard público</button>
+      <button class="btn danger" id="logoutBtn">Sair</button>
+    </div>
+  </header>
 
-<button class="logout-btn" onclick="logout()">Sair</button>
+  <div class="wrap">
+    <nav>
+      <div class="menu card" id="menu">
+        <button data-view="dashboard" class="active">Dashboard</button>
+        <button data-view="entradas">Entradas</button>
+        <button data-view="saidas">Saídas</button>
+        <button data-view="dizimistas">Dizimistas</button>
+        <button data-view="configs">Configurações</button>
+      </div>
+    </nav>
 
-<h1>Painel da Tesouraria</h1>
+    <main id="main">
+      <!-- DASHBOARD -->
+      <section id="view-dashboard">
+        <div class="card">
+          <div class="topbar">
+            <div>
+              <div class="small">Resumo</div>
+              <h2 id="sumTitle">Resumo geral</h2>
+            </div>
+            <div class="row">
+              <div class="dcard"><div class="small">Entradas</div><div id="totalEntradas" style="font-weight:700">—</div></div>
+              <div class="dcard"><div class="small">Saídas</div><div id="totalSaidas" style="font-weight:700">—</div></div>
+              <div class="dcard"><div class="small">Saldo</div><div id="saldoFinal" style="font-weight:700">—</div></div>
+              <div class="dcard"><div class="small">Última atualização</div><div id="lastUpdate">—</div></div>
+            </div>
+          </div>
+        </div>
 
-<div class="box">
-    <h3>Bem-vindo, adminpib!</h3>
-    <p>Aqui você poderá administrar e visualizar dados da tesouraria.</p>
-</div>
+        <div class="card">
+          <h3 class="small">Gráficos</h3>
+          <div style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap">
+            <div style="flex:1;min-width:320px"><canvas id="chartBar" height="160"></canvas></div>
+            <div style="width:320px"><canvas id="chartPie" height="160"></canvas></div>
+          </div>
+        </div>
 
+        <div class="card">
+          <h3 class="small">Totais por mês</h3>
+          <div id="monthlyTable"></div>
+        </div>
+      </section>
+
+      <!-- ENTRADAS -->
+      <section id="view-entradas" style="display:none">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3>Entradas</h3>
+            <div class="controls">
+              <input id="searchEntradas" placeholder="Buscar..." />
+              <button class="btn" id="refreshEntradas">Atualizar</button>
+              <button class="btn" id="exportEntradasExcel">Excel</button>
+            </div>
+          </div>
+          <div id="tableEntradas"></div>
+        </div>
+      </section>
+
+      <!-- SAÍDAS -->
+      <section id="view-saidas" style="display:none">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3>Saídas</h3>
+            <div class="controls">
+              <input id="searchSaidas" placeholder="Buscar..." />
+              <button class="btn" id="refreshSaidas">Atualizar</button>
+              <button class="btn" id="exportSaidasExcel">Excel</button>
+            </div>
+          </div>
+          <div id="tableSaidas"></div>
+        </div>
+      </section>
+
+      <!-- DIZIMISTAS -->
+      <section id="view-dizimistas" style="display:none">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <h3>Dizimistas</h3>
+            <div class="controls">
+              <button class="btn" id="refreshDizimistas">Atualizar</button>
+              <button class="btn" id="exportDizimistasExcel">Excel</button>
+            </div>
+          </div>
+          <div id="dizimistasCards" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"></div>
+          <div id="tableDizimistas" style="margin-top:12px"></div>
+        </div>
+      </section>
+
+      <!-- CONFIGS -->
+      <section id="view-configs" style="display:none">
+        <div class="card">
+          <h3>Configurações</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <label class="small">Link CSV - Entradas</label><br>
+              <input id="cfgEntradas" style="width:100%" />
+            </div>
+            <div>
+              <label class="small">Link CSV - Saídas</label><br>
+              <input id="cfgSaidas" style="width:100%" />
+            </div>
+            <div>
+              <label class="small">Link CSV - Dizimistas</label><br>
+              <input id="cfgDizimistas" style="width:100%" />
+            </div>
+            <div>
+              <label class="small">Usuário Admin</label><br>
+              <input id="cfgUser" />
+              <div class="small">Alterar usuário (novo login)</div>
+            </div>
+            <div>
+              <label class="small">Senha Admin</label><br>
+              <input id="cfgPass" type="password" />
+              <div class="small">Alterar senha (novo login)</div>
+            </div>
+            <div style="align-self:end">
+              <button class="btn" id="saveCfg">Salvar Configurações</button>
+            </div>
+          </div>
+          <p class="small" style="margin-top:12px">Observação: as configurações são salvas localmente no navegador (localStorage).</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer>
+    Sistema simples · Dados via Google Sheets · Para suporte, me diga as colunas se algo não aparecer.
+  </footer>
+
+  <!-- script principal -->
+  <script src="dashboard.js"></script>
+  <script>
+    // menu
+    document.querySelectorAll('#menu button').forEach(btn=>{
+      btn.addEventListener('click', ()=> {
+        document.querySelectorAll('#menu button').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const view = btn.dataset.view;
+        document.querySelectorAll('main section').forEach(s=> s.style.display = 'none');
+        document.getElementById('view-'+view).style.display = 'block';
+      });
+    });
+
+    document.getElementById('logoutBtn').addEventListener('click', ()=> { logout(); });
+    document.getElementById('openPublic').addEventListener('click', ()=> { window.open('index.html','_blank'); });
+
+    // save config
+    document.getElementById('saveCfg').addEventListener('click', ()=> {
+      const cE = document.getElementById('cfgEntradas').value.trim();
+      const cS = document.getElementById('cfgSaidas').value.trim();
+      const cD = document.getElementById('cfgDizimistas').value.trim();
+      const u = document.getElementById('cfgUser').value.trim();
+      const p = document.getElementById('cfgPass').value.trim();
+      if(cE) localStorage.setItem('cfg_ent', cE);
+      if(cS) localStorage.setItem('cfg_sai', cS);
+      if(cD) localStorage.setItem('cfg_diz', cD);
+      if(u) localStorage.setItem('cfg_user', u);
+      if(p) localStorage.setItem('cfg_pass', p);
+      alert('Configurações salvas. Para efeito de login, recarregue a página de login se alterou usuário/senha.');
+    });
+  </script>
 </body>
 </html>
