@@ -1,9 +1,5 @@
 /****************************************************
  * dashboard_admin.js
- * Controla o painel administrativo:
- * - Adicionar / editar / deletar entradas
- * - Idem para saídas, dizimistas e despesas fixas
- * - Gera despesas fixas automaticamente
  ****************************************************/
 
 const API_URL =
@@ -60,7 +56,7 @@ async function deleteItem(sheet, row) {
 }
 
 /****************************************************
- * GERAR DESPESAS FIXAS AUTOMATICAMENTE
+ * GERAR DESPESAS FIXAS
  ****************************************************/
 async function gerarDespesasFixas() {
   const r = await sendToAPI("generate_fixed", "Despesas Fixas");
@@ -74,31 +70,32 @@ async function gerarDespesasFixas() {
 }
 
 /****************************************************
- * CONECTAR BOTÕES DO HTML
+ * CONECTAR BOTÕES
  ****************************************************/
 document.addEventListener("DOMContentLoaded", () => {
+
   // Entradas
   const btnAddEntrada = document.getElementById("btnAddEntrada");
-  if (btnAddEntrada)
-    btnAddEntrada.onclick = () => addItem("Entradas");
+  if (btnAddEntrada) btnAddEntrada.onclick = () => addItem("Entradas");
 
   // Saídas
   const btnAddSaida = document.getElementById("btnAddSaida");
-  if (btnAddSaida)
-    btnAddSaida.onclick = () => addItem("Saídas");
+  if (btnAddSaida) btnAddSaida.onclick = () => addItem("Saídas");
 
   // Dizimistas
   const btnAddDiz = document.getElementById("btnAddDizimista");
-  if (btnAddDiz)
-    btnAddDiz.onclick = () => addItem("Dizimistas");
+  if (btnAddDiz) btnAddDiz.onclick = () => addItem("Dizimistas");
 
-  // Despesas Fixas
-  const btnAddFix = document.getElementById("btnAddDespesaFixa");
-  if (btnAddFix)
-    btnAddFix.onclick = () => addItem("Despesas Fixas");
+  // Despesas Fixas – botão "Adicionar"
+  const btnAddFix = document.getElementById("btnAddFixa");
+  if (btnAddFix) btnAddFix.onclick = () => addItem("Despesas Fixas");
 
-  // Gerar despesas fixas
-  const btnGerarFixas = document.getElementById("btnGerarFixas");
-  if (btnGerarFixas)
-    btnGerarFixas.onclick = gerarDespesasFixas;
+  // Despesas Fixas – botão "Gerar (Todos)"
+  const btnGerarFixUI = document.getElementById("btnGenerateFixedUI");
+  if (btnGerarFixUI) btnGerarFixUI.onclick = gerarDespesasFixas;
+
+  // Despesas Fixas – botão do topo ("Gerar Despesas Fixas")
+  const btnGerarTop = document.getElementById("btnGenFixVisible");
+  if (btnGerarTop) btnGerarTop.onclick = gerarDespesasFixas;
+
 });
