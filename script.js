@@ -52,7 +52,17 @@ function renderTable(title, data, containerId) {
 }
 
 // ----------------------
-// Carrega tudo
+// Função que soma uma coluna numérica
+// ----------------------
+function sumColumn(data, columnName) {
+  return data.reduce((total, item) => {
+    const num = parseFloat(item[columnName].replace(",", "."));
+    return total + (isNaN(num) ? 0 : num);
+  }, 0);
+}
+
+// ----------------------
+// Carrega TUDO
 // ----------------------
 async function loadDashboard() {
   try {
@@ -60,6 +70,23 @@ async function loadDashboard() {
     const saidas = await fetchCsv(URL_SAIDAS);
     const dizimistas = await fetchCsv(URL_DIZIMISTAS);
 
+    // Totais
+    const totalEntradas = sumColumn(entradas, "Valor");
+    const totalSaidas = sumColumn(saidas, "Valor");
+    const saldo = totalEntradas - totalSaidas;
+
+    // Mostrar totais
+    document.getElementById("totalEntradas").textContent = 
+      totalEntradas.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    document.getElementById("totalSaidas").textContent = 
+      totalSaidas.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+    const saldoEl = document.getElementById("saldoFinal");
+    saldoEl.textContent = saldo.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    saldoEl.className = saldo >= 0 ? "saldo-positivo" : "saldo-negativo";
+
+    // Renderizar tabelas
     renderTable("Entradas", entradas, "entradas");
     renderTable("Saídas", saidas, "saidas");
     renderTable("Dizimistas", dizimistas, "dizimistas");
@@ -71,4 +98,5 @@ async function loadDashboard() {
 }
 
 loadDashboard();
+
 
