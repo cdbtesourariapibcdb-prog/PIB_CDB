@@ -1,4 +1,3 @@
-/* style.css - básico e responsivo */
 :root{--bg:#f7f8fb;--card:#fff;--muted:#6b7280;--accent:#1366d6;--danger:#d23b3b;}
 *{box-sizing:border-box}
 body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);color:#0f172a}
