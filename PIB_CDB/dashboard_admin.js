@@ -1,89 +1,150 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbzdeHEsqNvldjx-38-W3ynWyC_pLi5OvH2VCCxmNyg/dev";
+/****************************************************
+ * dashboard_admin.js
+ * Controla o painel administrativo:
+ * - Adicionar / editar / deletar entradas
+ * - Idem para saídas, dizimistas e despesas fixas
+ * - Gera despesas fixas automaticamente
+ ****************************************************/
 
-// ------- Função de envio para API ---------
-async function sendToAPI(data) {
-    try {
-        const response = await fetch(API_URL, {
-            method: "POST",
-            mode: "cors",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
-        });
+const API_URL =
+  "https://script.google.com/macros/s/AKfycbzV1eTn_eoldgPtfOlAZRAlJGQoK2WU1BG-cixCKEzv_nn_IxYOSEaCpyOLWWG57JLv/exec";
 
-        if (!response.ok) {
-            throw new Error("Erro na resposta da API");
-        }
+/****************************************************
+ * ENVIAR DADOS PARA A API
+ ****************************************************/
+async function sendToAPI(action, sheet, data = null, row = null) {
+  const form = new FormData();
+  form.append("action", action);
+  form.append("sheet", sheet);
 
-        return await response.json();
-    } catch (error) {
-        console.error("Erro ao enviar:", error);
-        alert("Erro ao conectar com o servidor. Verifique a publicação do WebApp!");
+  if (data) form.append("data", JSON.stringify(data));
+  if (row) form.append("row", row);
+
+  try {
+    const res = await fetch(API_URL, { method: "POST", body: form });
+    return await res.text();
+  } catch (err) {
+    console.error("Erro ao conectar API:", err);
+    return "fetch_error";
+  }
+}
+
+/****************************************************
+ * ABRIR FORMULÁRIO (MODAL)
+ ****************************************************/
+function openModal(title, fields, callback) {
+  document.getElementById("modalTitle").innerText = title;
+
+  const body = document.getElementById("modalBody");
+  body.innerHTML = "";
+
+  fields.forEach(field => {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <label>${field}</label>
+      <input data-field="${field}" />
+    `;
+    body.appendChild(div);
+  });
+
+  document.getElementById("modalSave").onclick = () => {
+    const inputs = [...document.querySelectorAll("#modalBody input")];
+    const values = inputs.map(i => i.value.trim());
+    callback(values);
+    closeModal();
+  };
+
+  document.getElementById("modal").style.display = "flex";
+}
+
+/****************************************************
+ * FECHAR MODAL
+ ****************************************************/
+function closeModal() {
+  document.getElementById("modal").style.display = "none";
+}
+
+/****************************************************
+ * ADICIONAR ITEM
+ ****************************************************/
+async function addItem(sheet, fields) {
+  openModal(`Adicionar em ${sheet}`, fields, async (result) => {
+    const r = await sendToAPI("add", sheet, result);
+
+    if (r === "added") {
+      alert("Registro adicionado com sucesso!");
+      location.reload();
+    } else {
+      alert("Erro ao adicionar: " + r);
     }
+  });
 }
 
-// ------- Funções de Adicionar Itens ---------
-async function addEntrada() {
-    const descricao = document.getElementById("entrada-desc").value;
-    const valor = document.getElementById("entrada-valor").value;
+/****************************************************
+ * DELETAR ITEM
+ ****************************************************/
+async function deleteItem(sheet, row) {
+  if (!confirm("Tem certeza que deseja excluir esta linha?")) return;
 
-    if (!descricao || !valor) return alert("Preencha os campos!");
+  const r = await sendToAPI("delete", sheet, null, row);
 
-    await sendToAPI({
-        type: "entrada",
-        descricao,
-        valor
-    });
-
-    alert("Entrada adicionada!");
+  if (r === "deleted") {
+    alert("Registro removido!");
+    location.reload();
+  } else {
+    alert("Erro ao excluir: " + r);
+  }
 }
 
-async function addSaida() {
-    const descricao = document.getElementById("saida-desc").value;
-    const valor = document.getElementById("saida-valor").value;
+/****************************************************
+ * GERAR DESPESAS FIXAS AUTOMATICAMENTE
+ ****************************************************/
+async function gerarDespesasFixas() {
+  const r = await sendToAPI("generate_fixed", "Despesas Fixas");
 
-    if (!descricao || !valor) return alert("Preencha os campos!");
-
-    await sendToAPI({
-        type: "saida",
-        descricao,
-        valor
-    });
-
-    alert("Saída adicionada!");
+  if (r === "generated_fixed") {
+    alert("Despesas fixas geradas com sucesso!");
+    location.reload();
+  } else {
+    alert("Erro ao gerar despesas fixas: " + r);
+  }
 }
 
-async function addDizimista() {
-    const nome = document.getElementById("diz-nome").value;
-    const valor = document.getElementById("diz-valor").value;
+/****************************************************
+ * CONECTAR BOTÕES DO HTML
+ ****************************************************/
+document.addEventListener("DOMContentLoaded", () => {
 
-    if (!nome || !valor) return alert("Preencha os campos!");
+  // ------------ ENTRADAS ------------
+  const btnAddEntrada = document.getElementById("btnAddEntrada");
+  if (btnAddEntrada)
+    btnAddEntrada.onclick = () => addItem("Entradas",
+      ["Data", "Descrição", "Valor", "Categoria"]
+    );
 
-    await sendToAPI({
-        type: "dizimista",
-        nome,
-        valor
-    });
+  // ------------ SAÍDAS ------------
+  const btnAddSaida = document.getElementById("btnAddSaida");
+  if (btnAddSaida)
+    btnAddSaida.onclick = () => addItem("Saídas",
+      ["Data", "Descrição", "Valor", "Categoria"]
+    );
 
-    alert("Dizimista adicionado!");
-}
+  // ------------ DIZIMISTAS ------------
+  const btnAddDiz = document.getElementById("btnAddDizimista");
+  if (btnAddDiz)
+    btnAddDiz.onclick = () => addItem("Dizimistas",
+      ["Nome", "Telefone", "Endereço"]
+    );
 
-async function addDespesaFixa() {
-    const nome = document.getElementById("fixa-nome").value;
-    const valor = document.getElementById("fixa-valor").value;
+  // ------------ DESPESAS FIXAS ------------
+  const btnAddFix = document.getElementById("btnAddFixa");
+  if (btnAddFix)
+    btnAddFix.onclick = () => addItem("Despesas Fixas",
+      ["Descrição", "Valor", "Dia do vencimento"]
+    );
 
-    if (!nome || !valor) return alert("Preencha os campos!");
-
-    await sendToAPI({
-        type: "despesafixa",
-        nome,
-        valor
-    });
-
-    alert("Despesa fixa adicionada!");
-}
-
-// ------- Liga botões ao JS ---------
-document.getElementById("btnAddEntrada").onclick = addEntrada;
-document.getElementById("btnAddSaida").onclick = addSaida;
-document.getElementById("btnAddDiz").onclick = addDizimista;
-document.getElementById("btnAddFixa").onclick = addDespesaFixa;
+  // Botão GERAR despesas fixas
+  const btnGerarFixas = document.getElementById("btnGenerateFixedUI");
+  if (btnGerarFixas)
+    btnGerarFixas.onclick = gerarDespesasFixas;
+});
