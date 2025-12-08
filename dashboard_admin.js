@@ -20,27 +20,64 @@ async function sendToAPI(action, sheet, data = null, row = null) {
   if (data) form.append("data", JSON.stringify(data));
   if (row) form.append("row", row);
 
-  const res = await fetch(API_URL, { method: "POST", body: form });
-  return await res.text();
+  try {
+    const res = await fetch(API_URL, { method: "POST", body: form });
+    return await res.text();
+  } catch (err) {
+    console.error("Erro ao conectar API:", err);
+    return "fetch_error";
+  }
+}
+
+/****************************************************
+ * ABRIR FORMULÁRIO (MODAL)
+ ****************************************************/
+function openModal(title, fields, callback) {
+  document.getElementById("modalTitle").innerText = title;
+
+  const body = document.getElementById("modalBody");
+  body.innerHTML = "";
+
+  fields.forEach(field => {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <label>${field}</label>
+      <input data-field="${field}" />
+    `;
+    body.appendChild(div);
+  });
+
+  document.getElementById("modalSave").onclick = () => {
+    const inputs = [...document.querySelectorAll("#modalBody input")];
+    const values = inputs.map(i => i.value.trim());
+    callback(values);
+    closeModal();
+  };
+
+  document.getElementById("modal").style.display = "flex";
+}
+
+/****************************************************
+ * FECHAR MODAL
+ ****************************************************/
+function closeModal() {
+  document.getElementById("modal").style.display = "none";
 }
 
 /****************************************************
  * ADICIONAR ITEM
  ****************************************************/
-async function addItem(sheet) {
-  const inputs = document.querySelectorAll(`#form_${sheet} input`);
-  const values = [];
+async function addItem(sheet, fields) {
+  openModal(`Adicionar em ${sheet}`, fields, async (result) => {
+    const r = await sendToAPI("add", sheet, result);
 
-  inputs.forEach(inp => values.push(inp.value.trim()));
-
-  const r = await sendToAPI("add", sheet, values);
-
-  if (r === "added") {
-    alert("Registro adicionado com sucesso!");
-    location.reload();
-  } else {
-    alert("Erro ao adicionar: " + r);
-  }
+    if (r === "added") {
+      alert("Registro adicionado com sucesso!");
+      location.reload();
+    } else {
+      alert("Erro ao adicionar: " + r);
+    }
+  });
 }
 
 /****************************************************
@@ -77,28 +114,37 @@ async function gerarDespesasFixas() {
  * CONECTAR BOTÕES DO HTML
  ****************************************************/
 document.addEventListener("DOMContentLoaded", () => {
-  // Entradas
+
+  // ------------ ENTRADAS ------------
   const btnAddEntrada = document.getElementById("btnAddEntrada");
   if (btnAddEntrada)
-    btnAddEntrada.onclick = () => addItem("Entradas");
+    btnAddEntrada.onclick = () => addItem("Entradas",
+      ["Data", "Descrição", "Valor", "Categoria"]
+    );
 
-  // Saídas
+  // ------------ SAÍDAS ------------
   const btnAddSaida = document.getElementById("btnAddSaida");
   if (btnAddSaida)
-    btnAddSaida.onclick = () => addItem("Saídas");
+    btnAddSaida.onclick = () => addItem("Saídas",
+      ["Data", "Descrição", "Valor", "Categoria"]
+    );
 
-  // Dizimistas
+  // ------------ DIZIMISTAS ------------
   const btnAddDiz = document.getElementById("btnAddDizimista");
   if (btnAddDiz)
-    btnAddDiz.onclick = () => addItem("Dizimistas");
+    btnAddDiz.onclick = () => addItem("Dizimistas",
+      ["Nome", "Telefone", "Endereço"]
+    );
 
-  // Despesas Fixas
-  const btnAddFix = document.getElementById("btnAddDespesaFixa");
+  // ------------ DESPESAS FIXAS ------------
+  const btnAddFix = document.getElementById("btnAddFixa");
   if (btnAddFix)
-    btnAddFix.onclick = () => addItem("Despesas Fixas");
+    btnAddFix.onclick = () => addItem("Despesas Fixas",
+      ["Descrição", "Valor", "Dia do vencimento"]
+    );
 
-  // Gerar despesas fixas
-  const btnGerarFixas = document.getElementById("btnGerarFixas");
+  // Botão GERAR despesas fixas
+  const btnGerarFixas = document.getElementById("btnGenerateFixedUI");
   if (btnGerarFixas)
     btnGerarFixas.onclick = gerarDespesasFixas;
 });
