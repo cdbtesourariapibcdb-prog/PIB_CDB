@@ -1,12 +1,43 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Dashboard Tesouraria Igreja</title>
+  <meta charset="UTF-8" />
+  <title>Dashboard Tesouraria</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f7f7f7;
+    }
+    h1 {
+      text-align: center;
+    }
+    h2 {
+      margin-top: 40px;
+      color: #333;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 10px;
+      background: white;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background: #eee;
+    }
+  </style>
 </head>
 <body>
-  <h1>Bem-vindo ao Dashboard da Tesouraria</h1>
-  <div id="app">Carregando dados...</div>
+  <h1>Dashboard Tesouraria – PIB CDB</h1>
+
+  <div id="entradas"></div>
+  <div id="saidas"></div>
+  <div id="dizimistas"></div>
 
   <script src="script.js"></script>
 </body>
