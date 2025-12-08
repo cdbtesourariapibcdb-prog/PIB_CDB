@@ -1,101 +1,89 @@
-/****************************************************
- * dashboard_admin.js
- ****************************************************/
+const API_URL = "https://script.google.com/macros/s/AKfycbzdeHEsqNvldjx-38-W3ynWyC_pLi5OvH2VCCxmNyg/dev";
 
-const API_URL =
-  "https://script.google.com/macros/s/AKfycbzV1eTn_eoldgPtfOlAZRAlJGQoK2WU1BG-cixCKEzv_nn_IxYOSEaCpyOLWWG57JLv/exec";
+// ------- Função de envio para API ---------
+async function sendToAPI(data) {
+    try {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            mode: "cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
 
-/****************************************************
- * ENVIAR DADOS PARA A API
- ****************************************************/
-async function sendToAPI(action, sheet, data = null, row = null) {
-  const form = new FormData();
-  form.append("action", action);
-  form.append("sheet", sheet);
+        if (!response.ok) {
+            throw new Error("Erro na resposta da API");
+        }
 
-  if (data) form.append("data", JSON.stringify(data));
-  if (row) form.append("row", row);
-
-  const res = await fetch(API_URL, { method: "POST", body: form });
-  return await res.text();
+        return await response.json();
+    } catch (error) {
+        console.error("Erro ao enviar:", error);
+        alert("Erro ao conectar com o servidor. Verifique a publicação do WebApp!");
+    }
 }
 
-/****************************************************
- * ADICIONAR ITEM
- ****************************************************/
-async function addItem(sheet) {
-  const inputs = document.querySelectorAll(`#form_${sheet} input`);
-  const values = [];
+// ------- Funções de Adicionar Itens ---------
+async function addEntrada() {
+    const descricao = document.getElementById("entrada-desc").value;
+    const valor = document.getElementById("entrada-valor").value;
 
-  inputs.forEach(inp => values.push(inp.value.trim()));
+    if (!descricao || !valor) return alert("Preencha os campos!");
 
-  const r = await sendToAPI("add", sheet, values);
+    await sendToAPI({
+        type: "entrada",
+        descricao,
+        valor
+    });
 
-  if (r === "added") {
-    alert("Registro adicionado com sucesso!");
-    location.reload();
-  } else {
-    alert("Erro ao adicionar: " + r);
-  }
+    alert("Entrada adicionada!");
 }
 
-/****************************************************
- * DELETAR ITEM
- ****************************************************/
-async function deleteItem(sheet, row) {
-  if (!confirm("Tem certeza que deseja excluir esta linha?")) return;
+async function addSaida() {
+    const descricao = document.getElementById("saida-desc").value;
+    const valor = document.getElementById("saida-valor").value;
 
-  const r = await sendToAPI("delete", sheet, null, row);
+    if (!descricao || !valor) return alert("Preencha os campos!");
 
-  if (r === "deleted") {
-    alert("Registro removido!");
-    location.reload();
-  } else {
-    alert("Erro ao excluir: " + r);
-  }
+    await sendToAPI({
+        type: "saida",
+        descricao,
+        valor
+    });
+
+    alert("Saída adicionada!");
 }
 
-/****************************************************
- * GERAR DESPESAS FIXAS
- ****************************************************/
-async function gerarDespesasFixas() {
-  const r = await sendToAPI("generate_fixed", "Despesas Fixas");
+async function addDizimista() {
+    const nome = document.getElementById("diz-nome").value;
+    const valor = document.getElementById("diz-valor").value;
 
-  if (r === "generated_fixed") {
-    alert("Despesas fixas geradas com sucesso!");
-    location.reload();
-  } else {
-    alert("Erro ao gerar despesas fixas: " + r);
-  }
+    if (!nome || !valor) return alert("Preencha os campos!");
+
+    await sendToAPI({
+        type: "dizimista",
+        nome,
+        valor
+    });
+
+    alert("Dizimista adicionado!");
 }
 
-/****************************************************
- * CONECTAR BOTÕES
- ****************************************************/
-document.addEventListener("DOMContentLoaded", () => {
+async function addDespesaFixa() {
+    const nome = document.getElementById("fixa-nome").value;
+    const valor = document.getElementById("fixa-valor").value;
 
-  // Entradas
-  const btnAddEntrada = document.getElementById("btnAddEntrada");
-  if (btnAddEntrada) btnAddEntrada.onclick = () => addItem("Entradas");
+    if (!nome || !valor) return alert("Preencha os campos!");
 
-  // Saídas
-  const btnAddSaida = document.getElementById("btnAddSaida");
-  if (btnAddSaida) btnAddSaida.onclick = () => addItem("Saídas");
+    await sendToAPI({
+        type: "despesafixa",
+        nome,
+        valor
+    });
 
-  // Dizimistas
-  const btnAddDiz = document.getElementById("btnAddDizimista");
-  if (btnAddDiz) btnAddDiz.onclick = () => addItem("Dizimistas");
+    alert("Despesa fixa adicionada!");
+}
 
-  // Despesas Fixas – botão "Adicionar"
-  const btnAddFix = document.getElementById("btnAddFixa");
-  if (btnAddFix) btnAddFix.onclick = () => addItem("Despesas Fixas");
-
-  // Despesas Fixas – botão "Gerar (Todos)"
-  const btnGerarFixUI = document.getElementById("btnGenerateFixedUI");
-  if (btnGerarFixUI) btnGerarFixUI.onclick = gerarDespesasFixas;
-
-  // Despesas Fixas – botão do topo ("Gerar Despesas Fixas")
-  const btnGerarTop = document.getElementById("btnGenFixVisible");
-  if (btnGerarTop) btnGerarTop.onclick = gerarDespesasFixas;
-
-});
+// ------- Liga botões ao JS ---------
+document.getElementById("btnAddEntrada").onclick = addEntrada;
+document.getElementById("btnAddSaida").onclick = addSaida;
+document.getElementById("btnAddDiz").onclick = addDizimista;
+document.getElementById("btnAddFixa").onclick = addDespesaFixa;
