@@ -1,315 +1,375 @@
 /****************************************************
- * dashboard_admin.js (COM AUDITORIA)
+ * dashboard_admin.js – versão final 100% compatível
+ * Funciona com JSONP (sem CORS) + Apps Script
  ****************************************************/
 
-const API_URL = "https://script.google.com/macros/s/AKfycbzdeHEsqNvldjx-38-W3ynWyC_pLi5OvH2VCCxmNyg/dev";
+// === CONFIGURAÇÃO ===
+const API_URL =
+  "https://script.google.com/macros/s/AKfycbzdeHEsqNvldjx-38-W3ynWyC_pLi5OvH2VCCxmNyg/dev";
 
-/* ---------- helpers API ---------- */
-async function apiGet(action){
-  const url = `${API_URL}?action=${action}`;
-  const res = await fetch(url);
-  const txt = await res.text();
-  try { return JSON.parse(txt); } catch(e){ console.error('apiGet parse error', txt); throw e; }
-}
+/****************************************************
+ * FUNÇÃO GLOBAL PARA CHAMAR A API (JSONP)
+ ****************************************************/
+async function callAPI(params = {}) {
+  return new Promise((resolve, reject) => {
+    const callbackName = "jsonp_callback_" + Math.floor(Math.random() * 999999);
 
-async function apiPost(action, sheetName, payload = {}){
-  const form = new URLSearchParams();
-  form.append('action', action);
-  form.append('sheet', sheetName);
-  if (payload.data !== undefined) form.append('data', JSON.stringify(payload.data));
-  if (payload.row !== undefined) form.append('row', String(payload.row));
-  const resp = await fetch(API_URL, { method: 'POST', body: form });
-  const text = await resp.text();
-  return { ok: resp.ok, text, status: resp.status };
-}
+    window[callbackName] = function (data) {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      resolve(data);
+    };
 
-/* ---------- modal helpers (reaproveitado) ---------- */
-const modalBack = document.getElementById('modal');
-const modalTitle = document.getElementById('modalTitle');
-const modalBody = document.getElementById('modalBody');
-const modalSaveBtn = document.getElementById('modalSave');
-const modalCancelBtn = document.getElementById('modalCancel');
+    const query = new URLSearchParams({
+      ...params,
+      callback: callbackName
+    }).toString();
 
-let currentForm = null;
-
-function openModal(title, headers, rowData=null){
-  modalTitle.innerText = title;
-  modalBody.innerHTML = "";
-  headers.forEach(h=>{
-    const wrap = document.createElement('div');
-    wrap.style.display='flex'; wrap.style.flexDirection='column';
-    const label = document.createElement('label'); label.className='small'; label.innerText = h;
-    const input = document.createElement('input'); input.name = h; input.value = (rowData && rowData[h])? rowData[h] : '';
-    wrap.appendChild(label); wrap.appendChild(input); modalBody.appendChild(wrap);
+    const script = document.createElement("script");
+    script.src = `${API_URL}?${query}`;
+    script.onerror = reject;
+    document.body.appendChild(script);
   });
-  currentForm = { headers, rowData };
-  modalBack.style.display = 'flex';
 }
-function closeModal(){ modalBack.style.display = 'none'; currentForm = null; }
-modalCancelBtn?.addEventListener('click', ()=> closeModal());
 
-modalSaveBtn?.addEventListener('click', async ()=>{
-  if(!currentForm) return;
-  const values = currentForm.headers.map(h => {
-    const inp = modalBody.querySelector(`[name="${h}"]`);
-    return inp ? inp.value : "";
+/****************************************************
+ * ABRE MODAL
+ ****************************************************/
+function openModal(title, fields, sheet, editingRow = null) {
+  document.getElementById("modalTitle").innerText = title;
+
+  const body = document.getElementById("modalBody");
+  body.innerHTML = "";
+
+  fields.forEach(f => {
+    const div = document.createElement("div");
+    div.innerHTML = `
+      <label class="small">${f.label}</label>
+      <input id="field_${f.id}" value="${f.value ?? ""}">
+    `;
+    body.appendChild(div);
   });
-  // determine sheet from title
-  const title = modalTitle.innerText.toLowerCase();
-  let sheet = null;
-  if (title.includes('entradas')) sheet = 'Entradas';
-  else if (title.includes('saídas') || title.includes('saidas')) sheet = 'Saídas';
-  else if (title.includes('dizimistas')) sheet = 'Dizimistas';
-  else if (title.includes('despesas')) sheet = 'Despesas Fixas';
 
-  if (!sheet) { alert('Sheet indefinido'); return; }
+  document.getElementById("modalSave").onclick = async () => {
+    const values = fields.map(f => {
+      const inp = document.getElementById(`field_${f.id}`);
+      return inp.value;
+    });
 
-  const res = await apiPost('add', sheet, { data: values });
-  if(res.ok || res.text === 'added'){
-    alert('Salvo');
-    closeModal();
-    refreshAll();
-  } else {
-    alert('Erro: ' + res.text);
-  }
-});
-
-/* ---------- render tables with actions ---------- */
-function renderTableWithActions(containerId, headers, rows){
-  const container = document.getElementById(containerId);
-  container.innerHTML = '';
-  if(!rows || rows.length === 0){ container.innerHTML = '<p class="small">Nenhum dado disponível.</p>'; return; }
-  let html = '<table><thead><tr>';
-  headers.forEach(h=> html += `<th>${h}</th>`);
-  html += '<th>Ações</th></tr></thead><tbody>';
-  rows.forEach((r, idx)=>{
-    html += '<tr>';
-    headers.forEach((h,i)=> html += `<td>${r[i] ?? ""}</td>`);
-    const sheetRow = idx + 2;
-    // create rowObj used for edit
-    const rowObj = {};
-    headers.forEach((h,i)=> rowObj[h] = r[i] ?? "");
-    html += `<td>
-      <button class="btn ghost" onclick='window.__edit(${JSON.stringify(headers)}, ${JSON.stringify(rowObj)}, "${containerId}")'>Editar</button>
-      <button class="btn danger" onclick='window.__del("${containerId}", ${sheetRow})'>Excluir</button>
-    </td>`;
-    html += '</tr>';
-  });
-  html += '</tbody></table>';
-  container.innerHTML = html;
-}
-window.__edit = function(headers, rowObj, containerId){
-  // infer sheet from containerId
-  let sheet = 'Entradas';
-  if(containerId.includes('Entradas') || containerId.toLowerCase().includes('entradas')) sheet = 'Entradas';
-  if(containerId.includes('Saidas') || containerId.toLowerCase().includes('saidas')) sheet = 'Saídas';
-  if(containerId.includes('Dizimistas')) sheet = 'Dizimistas';
-  if(containerId.includes('Fixas')) sheet = 'Despesas Fixas';
-  openModal(`Editar ${sheet}`, headers, rowObj);
-};
-window.__del = async function(containerId, row){
-  if(!confirm('Confirma exclusão?')) return;
-  let sheet = 'Entradas';
-  if(containerId.includes('Entradas') || containerId.toLowerCase().includes('entradas')) sheet = 'Entradas';
-  if(containerId.includes('Saidas') || containerId.toLowerCase().includes('saidas')) sheet = 'Saídas';
-  if(containerId.includes('Dizimistas')) sheet = 'Dizimistas';
-  if(containerId.includes('Fixas')) sheet = 'Despesas Fixas';
-  const res = await apiPost('delete', sheet, { row });
-  if(res.ok || res.text === 'deleted'){ alert('Removido'); refreshAll(); } else alert('Erro: '+res.text);
-};
-
-/* ---------- state + refresh ---------- */
-let state = { entradas:[], saidas:[], dizimistas:[], fixas:[] };
-
-async function refreshAll(){
-  try{
-    document.getElementById('lastUpdate').textContent = 'Carregando...';
-    const [e,s,d,f] = await Promise.all([
-      apiGet('entradas'),
-      apiGet('saidas'),
-      apiGet('dizimistas'),
-      apiGet('fixas')
-    ]);
-    state.entradas = e || [];
-    state.saidas = s || [];
-    state.dizimistas = d || [];
-    state.fixas = f || [];
-
-    // totals
-    const entValIdx = 2; // Entradas: Data(0), Descrição(1), Valor(2), Categoria(3)
-    const saiValIdx = 2; // Saídas: Data(0), Despesa(1), Valor(2), Observação(3)
-    const totalEntr = (state.entradas || []).reduce((acc,r)=>acc + parseNumber(r[entValIdx]), 0);
-    const totalSai = (state.saidas || []).reduce((acc,r)=>acc + parseNumber(r[saiValIdx]), 0);
-    const saldo = totalEntr - totalSai;
-    document.getElementById('totalEntradas').textContent = fmtBRL(totalEntr);
-    document.getElementById('totalSaidas').textContent = fmtBRL(totalSai);
-    const sf = document.getElementById('saldoFinal'); sf.textContent = fmtBRL(saldo); sf.style.color = saldo>=0 ? '#0b9b3a' : '#d23b3b';
-    document.getElementById('lastUpdate').textContent = new Date().toLocaleString('pt-BR');
-
-    // render tables for admin
-    renderTableWithActions('tableEntradas', ['Data','Descrição','Valor','Categoria'], state.entradas);
-    renderTableWithActions('tableSaidas', ['Data','Despesa','Valor','Observação'], state.saidas);
-    renderTableWithActions('tableDizimistas', ['Nome','Telefone','Dizimo Mensal'], state.dizimistas);
-    renderTableWithActions('tableFixas', ['Despesa','Valor','Dia','Categoria'], state.fixas);
-
-    // rebuild audit month select
-    buildAuditMonthSelect();
-
-    // charts
-    buildCharts(state.entradas, state.saidas);
-
-  } catch(err){
-    console.error('refreshAll', err);
-    document.getElementById('lastUpdate').textContent = 'Erro';
-  }
-}
-
-/* ---------- number/date helpers ---------- */
-function parseNumber(v){ if(v==null) return 0; const s=String(v).replace(/\s/g,'').replace(/\u00A0/g,'').replace(/R\$|BRL/g,''); if(s==='') return 0; if(s.match(/[0-9]+\.[0-9]{3},/)) return parseFloat(s.replace(/\./g,'').replace(',','.')); if(s.indexOf(',')>-1 && s.indexOf('.')===-1) return parseFloat(s.replace(',','.')); const only=s.replace(/[^0-9\.-]/g,''); const n=parseFloat(only); return isNaN(n)?0:n; }
-function fmtBRL(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
-function parseDateSmart(str){ if(!str) return null; str=String(str).trim(); const dmy=str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/); if(dmy){ let y=+dmy[3]; if(y<100) y+=2000; return new Date(y,+dmy[2]-1,+dmy[1]); } const iso=Date.parse(str); if(!isNaN(iso)) return new Date(iso); return null; }
-
-/* ---------- Charts ---------- */
-let chartBar = null;
-function buildCharts(entradas, saidas){
-  try{
-    function aggMonthly(rows, dateIdx, valIdx){
-      const map={};
-      rows.forEach(r=>{
-        const dt = parseDateSmart(r[dateIdx]);
-        if(!dt) return;
-        const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
-        map[key] = (map[key] || 0) + parseNumber(r[valIdx]);
+    if (editingRow) {
+      const r = await callAPI({
+        action: "update",
+        sheet,
+        row: editingRow,
+        data: JSON.stringify(values)
       });
-      return Object.keys(map).sort().map(k=>({month:k,total:map[k]}));
+
+      alert(r === "updated" ? "Atualizado!" : "Erro: " + r);
+    } else {
+      const r = await callAPI({
+        action: "add",
+        sheet,
+        data: JSON.stringify(values)
+      });
+
+      alert(r === "added" ? "Adicionado!" : "Erro: " + r);
     }
-    const aE = aggMonthly(entradas, 0, 2);
-    const aS = aggMonthly(saidas, 0, 2);
-    const labels = Array.from(new Set([...aE.map(x=>x.month), ...aS.map(x=>x.month)])).sort();
-    const labelsFmt = labels.map(l=>{ const [y,m]=l.split('-'); return new Date(+y,+m-1,1).toLocaleString('pt-BR',{month:'short',year:'numeric'}); });
-    const mapE = Object.fromEntries(aE.map(x=>[x.month,x.total]));
-    const mapS = Object.fromEntries(aS.map(x=>[x.month,x.total]));
-    const dataE = labels.map(l => mapE[l] || 0);
-    const dataS = labels.map(l => mapS[l] || 0);
 
-    const ctx = document.getElementById('auditChart')?.getContext('2d');
-    if(!ctx) return;
-    if(chartBar) chartBar.destroy();
-    chartBar = new Chart(ctx, {
-      type: 'bar',
-      data: { labels: labelsFmt, datasets: [
-        { label: 'Entradas', data: dataE },
-        { label: 'Saídas', data: dataS }
-      ]},
-      options: { responsive:true, scales:{ y:{ ticks:{ callback: v=> fmtBRL(v) } } } }
-    });
-  }catch(e){ console.warn('buildCharts error', e); }
+    closeModal();
+    loadTables();
+  };
+
+  document.getElementById("modal").style.display = "flex";
 }
 
-/* ---------- Auditoria: build month select + render ---------- */
-function buildAuditMonthSelect(){
-  const sel = document.getElementById('auditMonth');
-  if(!sel) return;
-  // months available from entradas + saidas
-  const all = [];
-  state.entradas.forEach(r=>{
-    const dt = parseDateSmart(r[0]);
-    if(dt) all.push(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`);
-  });
-  state.saidas.forEach(r=>{
-    const dt = parseDateSmart(r[0]);
-    if(dt) all.push(`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`);
-  });
-  const uniq = Array.from(new Set(all)).sort().reverse();
-  sel.innerHTML = '';
-  uniq.forEach(m => {
-    const [y,mm] = m.split('-');
-    const dt = new Date(+y, +mm-1, 1);
-    const opt = document.createElement('option');
-    opt.value = m;
-    opt.innerText = dt.toLocaleString('pt-BR',{month:'long',year:'numeric'});
-    sel.appendChild(opt);
-  });
-  // default to current month if available
-  const nowKey = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
-  if([...sel.options].some(o=>o.value===nowKey)) sel.value = nowKey;
+function closeModal() {
+  document.getElementById("modal").style.display = "none";
 }
 
-document.getElementById('btnRefreshAudit')?.addEventListener('click', ()=> renderAuditoria());
-document.getElementById('auditMonth')?.addEventListener('change', ()=> renderAuditoria());
+/****************************************************
+ * DELETAR REGISTRO
+ ****************************************************/
+async function deleteItem(sheet, row) {
+  if (!confirm("Tem certeza que deseja excluir?")) return;
 
-async function renderAuditoria(){
-  const sel = document.getElementById('auditMonth');
-  const key = sel ? sel.value : `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
-  const [year, month] = key.split('-').map(n=>parseInt(n,10));
-  // filter entries for that month
-  const entradas = (state.entradas || []).filter(r=>{
-    const dt = parseDateSmart(r[0]);
-    return dt && dt.getFullYear()===year && (dt.getMonth()+1)===month;
-  });
-  const saidas = (state.saidas || []).filter(r=>{
-    const dt = parseDateSmart(r[0]);
-    return dt && dt.getFullYear()===year && (dt.getMonth()+1)===month;
+  const r = await callAPI({
+    action: "delete",
+    sheet,
+    row
   });
 
-  // build table HTML
-  let html = '<table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Valor</th></tr></thead><tbody>';
-  entradas.forEach(r=>{
-    html += `<tr><td>${r[0] || ''}</td><td>Entrada</td><td>${r[1] || ''}</td><td>${fmtBRL(parseNumber(r[2]))}</td></tr>`;
-  });
-  saidas.forEach(r=>{
-    html += `<tr><td>${r[0] || ''}</td><td>Saída</td><td>${r[1] || ''}</td><td>${fmtBRL(parseNumber(r[2]))}</td></tr>`;
-  });
-  html += '</tbody></table>';
+  alert(r === "deleted" ? "Excluído!" : "Erro: " + r);
 
-  document.getElementById('auditoriaTable').innerHTML = html;
-
-  // also update monthly comparative chart (already built from state)
-  buildCharts(state.entradas, state.saidas);
+  loadTables();
 }
 
-/* ---------- init mapping of UI buttons ---------- */
-document.addEventListener('DOMContentLoaded', ()=>{
-  // add buttons existing in your admin.html
-  document.getElementById('btnAddEntrada')?.addEventListener('click', ()=> openModal('Entradas', ['Data','Descrição','Valor','Categoria']));
-  document.getElementById('btnAddSaida')?.addEventListener('click', ()=> openModal('Saídas', ['Data','Despesa','Valor','Observação']));
-  document.getElementById('btnAddDizimista')?.addEventListener('click', ()=> openModal('Dizimistas', ['Nome','Telefone','Dizimo Mensal']));
-  document.getElementById('btnAddFixa')?.addEventListener('click', ()=> openModal('Despesas Fixas', ['Despesa','Valor','Dia','Categoria']));
+/****************************************************
+ * CARREGAR TABELAS
+ ****************************************************/
+async function loadTables() {
+  loadEntradas();
+  loadSaidas();
+  loadDizimistas();
+  loadFixas();
+}
 
-  document.getElementById('refreshEntradas')?.addEventListener('click', ()=> refreshAll());
-  document.getElementById('refreshSaidas')?.addEventListener('click', ()=> refreshAll());
-  document.getElementById('refreshDizimistas')?.addEventListener('click', ()=> refreshAll());
-  document.getElementById('refreshFixas')?.addEventListener('click', ()=> refreshAll());
+/****************************************************
+ * ENTRADAS
+ ****************************************************/
+async function loadEntradas() {
+  const data = await callAPI({ action: "entradas", sheet: "Entradas" });
 
-  document.getElementById('btnGenerateFixedUI')?.addEventListener('click', async ()=> {
-    if(!confirm('Gerar despesas fixas agora?')) return;
-    const res = await apiPost('generate_fixed','Despesas Fixas',{});
-    if(res.ok || res.text === 'generated_fixed'){ alert('Despesas fixas geradas'); refreshAll(); } else alert('Erro: '+res.text);
+  const div = document.getElementById("tableEntradas");
+  if (!div) return;
+
+  let html = `
+    <table><tr>
+      <th>#</th><th>Data</th><th>Descrição</th>
+      <th>Valor</th><th>Categoria</th><th>Ações</th>
+    </tr>
+  `;
+
+  data.forEach((row, i) => {
+    html += `
+      <tr>
+        <td>${i + 2}</td>
+        <td>${row[0]}</td>
+        <td>${row[1]}</td>
+        <td>${row[2]}</td>
+        <td>${row[3]}</td>
+        <td>
+          <button onclick="editEntrada(${i + 2}, ${JSON.stringify(row).replace(/"/g, '&quot;')})">✏️</button>
+          <button onclick="deleteItem('Entradas', ${i + 2})">🗑️</button>
+        </td>
+      </tr>
+    `;
   });
 
-  document.getElementById('btnGenFixVisible')?.addEventListener('click', async ()=> {
-    if(!confirm('Gerar despesas fixas agora?')) return;
-    const res = await apiPost('generate_fixed','Despesas Fixas',{});
-    if(res.ok || res.text === 'generated_fixed'){ alert('Despesas fixas geradas'); refreshAll(); } else alert('Erro: '+res.text);
+  html += "</table>";
+  div.innerHTML = html;
+}
+
+function editEntrada(row, item) {
+  openModal(
+    "Editar Entrada",
+    [
+      { id: "data", label: "Data", value: item[0] },
+      { id: "desc", label: "Descrição", value: item[1] },
+      { id: "valor", label: "Valor", value: item[2] },
+      { id: "cat", label: "Categoria", value: item[3] }
+    ],
+    "Entradas",
+    row
+  );
+}
+
+document.getElementById("btnAddEntrada").onclick = () =>
+  openModal(
+    "Adicionar Entrada",
+    [
+      { id: "data", label: "Data" },
+      { id: "desc", label: "Descrição" },
+      { id: "valor", label: "Valor" },
+      { id: "cat", label: "Categoria" }
+    ],
+    "Entradas"
+  );
+
+/****************************************************
+ * SAÍDAS
+ ****************************************************/
+async function loadSaidas() {
+  const data = await callAPI({ action: "saidas", sheet: "Saídas" });
+
+  const div = document.getElementById("tableSaidas");
+  if (!div) return;
+
+  let html = `
+    <table><tr>
+      <th>#</th><th>Data</th><th>Despesa</th>
+      <th>Valor</th><th>Observação</th><th>Ações</th>
+    </tr>
+  `;
+
+  data.forEach((row, i) => {
+    html += `
+      <tr>
+        <td>${i + 2}</td>
+        <td>${row[0]}</td>
+        <td>${row[1]}</td>
+        <td>${row[2]}</td>
+        <td>${row[3]}</td>
+        <td>
+          <button onclick="editSaida(${i + 2}, ${JSON.stringify(row).replace(/"/g, '&quot;')})">✏️</button>
+          <button onclick="deleteItem('Saídas', ${i + 2})">🗑️</button>
+        </td>
+      </tr>
+    `;
   });
 
-  // audit controls
-  document.getElementById('btnRefreshAudit')?.addEventListener('click', ()=> renderAuditoria());
+  html += "</table>";
+  div.innerHTML = html;
+}
 
-  // menu show/hide view handling (if not already present)
-  document.querySelectorAll('#menu button').forEach(btn=>{
-    btn.addEventListener('click', ()=> {
-      document.querySelectorAll('#menu button').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      const view = btn.dataset.view;
-      document.querySelectorAll('main section').forEach(s=> s.style.display = 'none');
-      const el = document.getElementById('view-'+view);
-      if(el) el.style.display = 'block';
-      // if auditoria selected, render it
-      if(view === 'auditoria') setTimeout(()=> renderAuditoria(), 120);
-    });
+function editSaida(row, item) {
+  openModal(
+    "Editar Saída",
+    [
+      { id: "data", label: "Data", value: item[0] },
+      { id: "desp", label: "Despesa", value: item[1] },
+      { id: "valor", label: "Valor", value: item[2] },
+      { id: "obs", label: "Observação", value: item[3] }
+    ],
+    "Saídas",
+    row
+  );
+}
+
+document.getElementById("btnAddSaida").onclick = () =>
+  openModal(
+    "Adicionar Saída",
+    [
+      { id: "data", label: "Data" },
+      { id: "desp", label: "Despesa" },
+      { id: "valor", label: "Valor" },
+      { id: "obs", label: "Observação" }
+    ],
+    "Saídas"
+  );
+
+/****************************************************
+ * DIZIMISTAS
+ ****************************************************/
+async function loadDizimistas() {
+  const data = await callAPI({ action: "dizimistas", sheet: "Dizimistas" });
+
+  const div = document.getElementById("tableDizimistas");
+  if (!div) return;
+
+  let html = `
+    <table><tr>
+      <th>#</th><th>Nome</th><th>Telefone</th>
+      <th>Dízimo Mensal</th><th>Ações</th>
+    </tr>
+  `;
+
+  data.forEach((row, i) => {
+    html += `
+      <tr>
+        <td>${i + 2}</td>
+        <td>${row[0]}</td>
+        <td>${row[1]}</td>
+        <td>${row[2]}</td>
+        <td>
+          <button onclick="editDiz(${i + 2}, ${JSON.stringify(row).replace(/"/g, '&quot;')})">✏️</button>
+          <button onclick="deleteItem('Dizimistas', ${i + 2})">🗑️</button>
+        </td>
+      </tr>
+    `;
   });
 
-  // initial load
-  refreshAll();
+  html += "</table>";
+  div.innerHTML = html;
+}
+
+function editDiz(row, item) {
+  openModal(
+    "Editar Dizimista",
+    [
+      { id: "nome", label: "Nome", value: item[0] },
+      { id: "tel", label: "Telefone", value: item[1] },
+      { id: "valor", label: "Dízimo Mensal", value: item[2] }
+    ],
+    "Dizimistas",
+    row
+  );
+}
+
+document.getElementById("btnAddDizimista").onclick = () =>
+  openModal(
+    "Adicionar Dizimista",
+    [
+      { id: "nome", label: "Nome" },
+      { id: "tel", label: "Telefone" },
+      { id: "valor", label: "Dízimo Mensal" }
+    ],
+    "Dizimistas"
+  );
+
+/****************************************************
+ * DESPESAS FIXAS
+ ****************************************************/
+async function loadFixas() {
+  const data = await callAPI({ action: "fixas", sheet: "Despesas Fixas" });
+
+  const div = document.getElementById("tableFixas");
+  if (!div) return;
+
+  let html = `
+    <table><tr>
+      <th>#</th><th>Despesa</th><th>Valor</th>
+      <th>Dia</th><th>Categoria</th><th>Ações</th>
+    </tr>
+  `;
+
+  data.forEach((row, i) => {
+    html += `
+      <tr>
+        <td>${i + 2}</td>
+        <td>${row[0]}</td>
+        <td>${row[1]}</td>
+        <td>${row[2]}</td>
+        <td>${row[3]}</td>
+        <td>
+          <button onclick="editFixa(${i + 2}, ${JSON.stringify(row).replace(/"/g, '&quot;')})">✏️</button>
+          <button onclick="deleteItem('Despesas Fixas', ${i + 2})">🗑️</button>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += "</table>";
+  div.innerHTML = html;
+}
+
+function editFixa(row, item) {
+  openModal(
+    "Editar Despesa Fixa",
+    [
+      { id: "nome", label: "Despesa", value: item[0] },
+      { id: "valor", label: "Valor", value: item[1] },
+      { id: "dia", label: "Dia", value: item[2] },
+      { id: "cat", label: "Categoria", value: item[3] }
+    ],
+    "Despesas Fixas",
+    row
+  );
+}
+
+document.getElementById("btnAddFixa").onclick = () =>
+  openModal(
+    "Adicionar Despesa Fixa",
+    [
+      { id: "nome", label: "Despesa" },
+      { id: "valor", label: "Valor" },
+      { id: "dia", label: "Dia" },
+      { id: "cat", label: "Categoria" }
+    ],
+    "Despesas Fixas"
+  );
+
+/****************************************************
+ * GERAR DESPESAS FIXAS
+ ****************************************************/
+document.getElementById("btnGenerateFixedUI").onclick = async () => {
+  const r = await callAPI({ action: "generate_fixed" });
+  alert(r === "generated_fixed" ? "Despesas fixas geradas!" : "Erro: " + r);
+  loadTables();
+};
+
+/****************************************************
+ * INICIAR
+ ****************************************************/
+document.addEventListener("DOMContentLoaded", () => {
+  loadTables();
 });
